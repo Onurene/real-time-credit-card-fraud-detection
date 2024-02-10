@@ -5,7 +5,7 @@ On the VM run following commands:
 > mkdir real-time-credit-card-fraud-detection
 > su 
 > enter password
-> mount -t vboxsf <paste the copied folder name from above> real-time-credit-card-fraud-detection
+> mount -t vboxsf real-time-credit-card-fraud-detection real-time-credit-card-fraud-detection
 > exit
 
 Going forward local system refers to cloudera VM
@@ -20,8 +20,13 @@ hadoop fs -cat fraud_detection/card_transactions.csv | wc -l
 
 Task3: Creating tables in MySQL
 
-Connect to mysqlmysql -u root -p
-Password :cloudera
+Connect to mysql
+mysql -u root -p
+Password :
+
+create database fraud_detection;
+
+use fraud_detection;
 
 create table stg_card_transactions 
 (card_id bigint,
@@ -30,10 +35,22 @@ amount int,
 postcode int,
 pos_id bigint,
 transaction_dt varchar(255),
-status varchar(50)
+status varchar(50),
+PRIMARY KEY(card_id, transaction_dt)
 );
 
 create table card_transactions 
+(card_id bigint,
+member_id bigint,
+amount int,
+postcode int,
+pos_id bigint,
+transaction_dt varchar(255),
+status varchar(50),
+PRIMARY KEY(card_id, transaction_dt)
+);
+
+create table transactions 
 (card_id bigint,
 member_id bigint,
 amount int,
@@ -44,6 +61,179 @@ status varchar(50),
 PRIMARY KEY(card_id, transaction_dt)
 );
 
+Encrypting mysql password in hadoop
 
-Task3: Sqoop export to the card_transactions table in MySQL database forcard_transactions.csv(Using Airflow) and delete the file from HDFS.Navigate to ->  BigData_Project_Demo -> Airflow_Scriptscopy : export_card_txns.pyNavigate to Home Directory -> airflow -> dagspaste :  export_card_txns.pyEncrypting MySQL Password - (Run in the terminal)hadoop credential create mysql.bigdataproject.password -providerjceks://hdfs/user/cloudera/mysql.dbpassword.jceks
+hadoop credential create mysql.fraud_detection.password -provider jceks://hdfs/user/cloudera/mysql.dbpassword.jceks
 
+
+Task 4: Install Airflow
+prereq : Python 3.5 above
+
+Run following commands
+
+mkdir airflow
+cd airflow
+mkdir dags
+python -m venv venv
+source venv/bin/activate
+pip install apache-airflow
+export AIRFLOW_HOME=$PWD    // Do not forget to run this in both webserver and scheduler terminal and also activate venv - source venv/bin/activate
+echo $AIRFLOW_HOME
+
+pip install paramiko    // Used for SSHOperator module
+
+terminal 1: airflow webserver  -p 8080   
+terminal 2: airflow scheduler
+open web browser: localhost:8080  
+
+# if you remove any dags and want to see it reflected  on the UI then you need to clear the dag 
+# from memory by restarting the webserver and scheduler
+airflow resetdb
+
+Task3: Sqoop export to the card_transactions table in MySQL database for card_transactions.csv (Using Airflow) and delete the file from HDFS.
+Copy sqoop_export_card_txns_full_load.py from Airflow_scripts to Home Directory -> airflow/dags
+
+Encrypting MySQL Password - (Run in the terminal)
+hadoop credential create mysql.bigdataproject.password -providerjceks://hdfs/user/cloudera/mysql.dbpassword.jceks
+
+Automate this query by adding it to a shell script and calling it using Airflow
+
+sqoop export \
+--connect jdbc:mysql://quickstart.cloudera:3306/fraud_detection \
+--username root \
+--password <>> \
+--table card_transactions \
+--staging-table stg_card_transactions \
+--export-dir /user/cloudera/fraud_detection/card_transactions_new.csv \
+--verbose \
+--fields-terminated-by ',' 
+
+
+# facing sqoop export issue - major minor version 52
+# changed java version from 1.8 to 1.7
+
+Load data from card_transactions to transactions  table by performing appropriate datatype modifications
+
+insert into transactions
+select card_id, member_id, amount, postcode, pos_id,
+str_to_date(transaction_dt, '%d-%m-%Y%H:%i:%s'),
+status
+from card_transactions
+;
+
+commit;
+
+Task 4: Create directories for member score and member details in HDFS
+
+hadoop fs -mkdir fraud_detection/member_score
+hadoop fs -mkdir fraud_detection/member_details
+
+hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_members.csv fraud_detection/member_details
+hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/member_score.csv fraud_detection/member_score
+
+
+
+Task 5: Create hive tables
+>hive
+
+SET HIVE.ENFORCE.BUCKETING=TRUE;
+
+create external table if not exists member_score
+(
+    member_id string,
+    score float
+)
+row format delimited fields terminated by ','
+stored as textfile
+location '/fraud_detection/member_score/';
+
+create external table if not exists member_details
+(
+    card_id bigint,
+    member_id bigint,
+    member_joining_dt timestamp ,
+    card_purchase_dt timestamp ,
+    country string,
+    city string,
+    score float
+)
+row format delimited fields terminated by ','
+stored as textfile
+location '/fraud_detection/member_details/';
+
+--Member score bucketed table(8 buckets)
+create table if not exists member_score_bucketed
+(
+    member_id string,
+    score float
+)
+CLUSTERED BY (member_id) into 8 buckets;
+
+--Member details bucketed table(8 buckets)
+
+create table if not exists member_details_bucketed
+(
+    card_id bigint,
+    member_id bigint,
+    member_joining_dt timestamp ,
+    card_purchase_dt timestamp ,
+    country string,
+    city string,
+    score float
+)
+CLUSTERED BY (card_id) into 8 buckets;
+
+Hive-Hbase card_transactions table creation : External & Bucketed tables
+
+create external table if not exists transactions 
+(
+    card_id bigint,
+    member_id bigint,
+    amount float,
+    postcode int,
+    pos_id bigint,
+    transaction_dt timestamp,
+    status string
+)row format delimited fields terminated by ','
+stored as textfile
+location '/fraud_detection/card_transactions_new/';
+
+load data inpath 'fraud_detection/member_score/member_score.csv' overwrite into table member_score;
+load data inpath 'fraud_detection/member_details/card_members.csv' overwrite into table member_details;
+
+Select count(*) from member_score;
+select count(*) from member_details;
+
+------- cmds not executed below
+
+create table transactions_bucketed
+(
+    cardid_txnts string,
+    card_id bigint,
+    member_id bigint,
+    amount float,
+    postcode int,
+    pos_id bigint,
+    transaction_dt timestamp,
+    status string
+)
+CLUSTERED by (card_id) into 8 buckets
+STORED BY 'org.apache.hadoop.hive.hbase.HBaseStorageHandler'
+WITHSERDEPROPERTIES("hbase.columns.mapping"=":key,trans_data:card_id,trans_data:member_id,trans_data:amount,trans_data:postcode,trans_data:pos_id,trans_data:transaction_dt,trans_data:Status") 
+TBLPROPERTIES ("hbase.table.name" = "transactions");
+
+Hive-Hbase card_lookup table creation : Bucketed tables
+
+create table card_lookup
+(
+    member_id bigint,
+    card_id bigint ,
+    ucl float ,
+    score float,
+    last_txn_time timestamp,
+    last_txn_zip string
+)
+CLUSTERED by (card_id) into 8 buckets
+STORED BY 'org.apache.hadoop.hive.hbase.HBaseStorageHandler'
+WITHSERDEPROPERTIES("hbase.columns.mapping"=":key,lkp_data:member_id,lkp_data:ucl,lkp_data:score, lkp_data:last_txn_time,lkp_data:last_txn_zip")
+TBLPROPERTIES ("hbase.table.name" = "card_lookup");
