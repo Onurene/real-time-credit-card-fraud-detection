@@ -1,0 +1,49 @@
+Task 1: Create a shared folder to copy files from local system to cloudera VM
+On the VM run following commands:
+> Go to Devices > Shared Folders > Add the path of your local filesystem > copy the folder name
+> cd Desktop
+> mkdir real-time-credit-card-fraud-detection
+> su 
+> enter password
+> mount -t vboxsf <paste the copied folder name from above> real-time-credit-card-fraud-detection
+> exit
+
+Going forward local system refers to cloudera VM
+
+Task2: Copy "card_transactions.cvs" file from local system to HDFS
+
+hadoop fs -mkdir fraud_detection
+hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_transactions.csv fraud_detection/
+hadoop fs -ls fraud_detection/card_transactions.csv
+hadoop fs -cat fraud_detection/card_transactions.csv | wc -l
+
+
+Task3: Creating tables in MySQL
+
+Connect to mysqlmysql -u root -p
+Password :cloudera
+
+create table stg_card_transactions 
+(card_id bigint,
+member_id bigint,
+amount int,
+postcode int,
+pos_id bigint,
+transaction_dt varchar(255),
+status varchar(50)
+);
+
+create table card_transactions 
+(card_id bigint,
+member_id bigint,
+amount int,
+postcode int,
+pos_id bigint,
+transaction_dt datetime,
+status varchar(50),
+PRIMARY KEY(card_id, transaction_dt)
+);
+
+
+Task3: Sqoop export to the card_transactions table in MySQL database forcard_transactions.csv(Using Airflow) and delete the file from HDFS.Navigate to ->  BigData_Project_Demo -> Airflow_Scriptscopy : export_card_txns.pyNavigate to Home Directory -> airflow -> dagspaste :  export_card_txns.pyEncrypting MySQL Password - (Run in the terminal)hadoop credential create mysql.bigdataproject.password -providerjceks://hdfs/user/cloudera/mysql.dbpassword.jceks
+
