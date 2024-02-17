@@ -1,0 +1,17 @@
+hadoop fs -mkdir project_datasets
+hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_transactions.csv project_datasets/
+hadoop fs -ls project_datasets/card_transactions.csv
+hadoop fs -cat project_datasets/card_transactions.csv | wc -l
+
+Encrypting mysql password in hadoop
+
+hadoop credential create mysql.fraud_detection.password -provider jceks://hdfs/user/cloudera/mysql.dbpassword.jceks
+
+hadoop fs -mkdir project_datasets/card_transactions
+hadoop fs -mkdir project_datasets/member_score
+hadoop fs -mkdir project_datasets/member_detail
+
+hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_transactions.csv project_datasets/card_transactions/
+hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/member_score.csv project_datasets/member_score/
+hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_members.csv project_datasets/member_detail/
+

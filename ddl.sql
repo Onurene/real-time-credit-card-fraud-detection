@@ -1,30 +1,11 @@
-Task 1: Create a shared folder to copy files from local system to cloudera VM
-On the VM run following commands:
-> Go to Devices > Shared Folders > Add the path of your local filesystem > copy the folder name
-> cd Desktop
-> mkdir real-time-credit-card-fraud-detection
-> su 
-> enter password
-> mount -t vboxsf real-time-credit-card-fraud-detection real-time-credit-card-fraud-detection
-> exit
-
-Going forward local system refers to cloudera VM
-
-Task2: Copy "card_transactions.cvs" file from local system to HDFS
-
-hadoop fs -mkdir project_datasets
-hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_transactions.csv project_datasets/
-hadoop fs -ls project_datasets/card_transactions.csv
-hadoop fs -cat project_datasets/card_transactions.csv | wc -l
-
-
-Task3: Creating tables in MySQL
-
 Connect to mysql
 mysql -u root -p
 Password :
 
+> mysql 
+
 create database project;
+
 
 use project;
 
@@ -40,7 +21,6 @@ status varchar(50)
 
 Alter ignore table stg_card_transactions add unique index idx_card_txns(card_id,transaction_dt);
 
-
 create table card_transactions 
 (card_id bigint,
 member_id bigint,
@@ -52,59 +32,6 @@ status varchar(50),
 PRIMARY KEY(card_id, transaction_dt)
 );
 
-
-Encrypting mysql password in hadoop
-
-hadoop credential create mysql.fraud_detection.password -provider jceks://hdfs/user/cloudera/mysql.dbpassword.jceks
-
-
-Task 4: Install Airflow
-prereq : Python 3.5 above
-
-Run following commands
-
-mkdir airflow
-cd airflow
-mkdir dags
-python -m venv venv
-source venv/bin/activate
-pip install apache-airflow
-export AIRFLOW_HOME=$PWD    // Do not forget to run this in both webserver and scheduler terminal and also activate venv - source venv/bin/activate
-echo $AIRFLOW_HOME
-
-pip install paramiko    // Used for SSHOperator module
-
-terminal 1: airflow webserver  -p 8080   
-terminal 2: airflow scheduler
-open web browser: localhost:8080  
-
-# if you remove any dags and want to see it reflected  on the UI then you need to clear the dag 
-# from memory by restarting the webserver and scheduler
-airflow resetdb
-
-Task3: Sqoop export to the card_transactions table in MySQL database for card_transactions.csv (Using Airflow) and delete the file from HDFS.
-Copy sqoop_export_card_txns_full_load.py from Airflow_scripts to Home Directory -> airflow/dags
-
-Encrypting MySQL Password - (Run in the terminal)
-hadoop credential create mysql.bigdataproject.password -providerjceks://hdfs/user/cloudera/mysql.dbpassword.jceks
-
-Automate this query by adding it to a shell script and calling it using Airflow
-
-sqoop export \
---connect jdbc:mysql://quickstart.cloudera:3306/fraud_detection \
---username root \
---password <>> \
---table stg_card_transactions \
---export-dir /user/cloudera/project_datasets/card_transactions.csv \
---verbose \
---fields-terminated-by ',' 
-
-
-# facing sqoop export issue - major minor version 52
-# changed java version from 1.8 to 1.7
-
-Load data from stg_card_transactions to card_transactions  table by performing appropriate datatype modifications
-
 insert into card_transactions
 select card_id, member_id, amount, postcode, pos_id,
 str_to_date(transaction_dt, '%d-%m-%Y%H:%i:%s'),
@@ -114,21 +41,9 @@ from stg_card_transactions
 
 commit;
 
-Task 4: Create directories for member score and member details in HDFS
-
-hadoop fs -mkdir project_datasets/card_transactions
-hadoop fs -mkdir project_datasets/member_score
-hadoop fs -mkdir project_datasets/member_detail
-
-hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_transactions.csv project_datasets/card_transactions/
-hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/member_score.csv project_datasets/member_score/
-hadoop fs -put Desktop/real-time-credit-card-fraud-detection/Datasets/card_members.csv project_datasets/member_detail/
-
-
-Task 5: Create hive tables
 >hive
 
-
+SET HIVE.ENFORCE.BUCKETING=TRUE;
 
 
 create external table if not exists member_score
@@ -201,17 +116,8 @@ location '/project_datasets/card_transactions/';
 load data inpath 'project_datasets/card_transactions/card_transactions.csv' overwrite into table card_transactions;
 
 
-
 Select count(*) from member_score;
 select count(*) from member_details;
-
-
--------issues noticed 
--- 1. member_details - null values for first 4 columns
-------- cmds not executed below
-
-sudo service hbase-master start
-sudo service hbase-regionserver start
 
 create table card_transactions_bucketed
 (
@@ -230,7 +136,6 @@ WITH
 SERDEPROPERTIES("hbase.columns.mapping"=":key,trans_data:card_id,trans_data:member_id,trans_data:amount,trans_data:postcode,trans_data:pos_id,trans_data:transaction_dt,trans_data:status") 
 TBLPROPERTIES ("hbase.table.name" = "card_transactions");
 
---Load card_txns_bucketed table with concatenated row key (In the Hive terminal)
 insert into table card_transactions_bucketed
 select concat_ws('~',cast(card_id as string),cast(transaction_dt as string)) as cardid_txnts,
         card_id,
@@ -242,8 +147,6 @@ select concat_ws('~',cast(card_id as string),cast(transaction_dt as string)) as 
         status
 from card_transactions;
 
--- table card_lookup exists in hbase - find how?
-Hive-Hbase card_lookup table creation : Bucketed tables
 
 create table card_lookup
 (
@@ -260,7 +163,6 @@ WITH
 SERDEPROPERTIES("hbase.columns.mapping"=":key,lkp_data:member_id,lkp_data:ucl,lkp_data:score, lkp_data:last_txn_time,lkp_data:last_txn_zip")
 TBLPROPERTIES ("hbase.table.name" = "card_lookup");
 
--------------------
 loading data into hive bucketed tables
 
 insert into table member_score_bucketed
@@ -268,3 +170,4 @@ select * from member_score;
 
 insert into table member_details_bucketed
 select * from member_details;
+

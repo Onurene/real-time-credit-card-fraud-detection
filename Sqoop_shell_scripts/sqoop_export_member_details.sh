@@ -5,7 +5,7 @@
 sqoop export \
 --connect jdbc:mysql://quickstart.cloudera:3306/project \
 --username root \
---password cloudera \
+--password <> \
 --table stg_member_details \
 --export-dir project_datasets/card_members.csv \
 --verbose \

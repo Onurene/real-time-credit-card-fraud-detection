@@ -3,9 +3,9 @@
 # Call command - ./sqoop_import_card_txns.sh quickstart.cloudera:3306 bigdataproject root card_transactions
 
 sqoop import \
---connect jdbc:mysql://quickstart.cloudera:3306/fraud_detection \
+--connect jdbc:mysql://quickstart.cloudera:3306/project \
 --username root \
---password cloudera \
+--password <> \
 --table transactions \
---target-dir /user/cloudera/fraud_detection/transactions \
+--target-dir /user/cloudera/project_datasets/card_transactions/ \
 --delete-target-dir
