@@ -1,0 +1,36 @@
+Go to the directory in your local system where .pem is present
+
+Download https://archive.apache.org/dist/kafka/3.0.0/kafka_2.13-3.6.1.tgz on local
+
+scp -i <>.pem kafka_2.13-3.6.1.tgz <username>@<public IPv4 dns>:/path/todestination/
+
+setup kafka on ec2 
+------------------
+tar -xvf kafka_2.13-3.6.1.tgz
+
+Download Java
+-------------
+sudo yum install java
+
+cd kafka_2.13-3.6.1
+
+Run following cmds in two different terminals to start kafka and zookeeper service
+----------------------------------------------------------------------------------
+bin/zookeeper-server-start.sh config/zookeeper.properties
+bin/kafka-server-start.sh config/server.properties      -- jvm error on ec2 -  solved by creating a larger ec2 instance
+
+create a kafka topic
+--------------------
+./kafka-topics.sh --bootstrap-server localhost:9092 --create --replication-factor 1 --partitions 1  --topic card_transactions_topic
+./kafka-topics.sh --list --bootstrap-server localhost:9092
+
+Dependencies install
+--------------------
+pip3 install boto3
+pip3 install confluent_kafka
+
+Start producer.py and consumer.py in two different terminals
+
+Reference blogs:
+https://medium.com/@nimeshaamarasingha/install-apache-kafka-in-aws-ec2-instance-d530c387d265
+https://blog.clairvoyantsoft.com/installation-of-an-apache-kafka-cluster-on-aws-ec2-instances-80577dcd26f3
